@@ -2,15 +2,134 @@ from fastapi import Depends
 from datetime import date, time, timedelta, datetime
 import json
 
-from app.models.roadmap import PersonalRoadmap, DailyCard, Task, TimeSlot
+from app.models.roadmap import (
+    PersonalRoadmap, DailyCard, Task, TimeSlot, 
+    WeeklyTheme, Quest, Resource, Goal
+)
 from app.utils.gemini_client import GeminiClient
 
 class RoadmapGeneratorService:
     def __init__(self, gemini_client: GeminiClient = Depends()):
         self.gemini_client = gemini_client
+    
+    async def generate_weekly_roadmap(self, persona_type: str, duration_months: int, user_id: str = None) -> PersonalRoadmap:
+        """Generate a personalized roadmap with weekly themes and quests"""
+        # Calculate date range
+        start_date = date.today()
+        end_date = start_date + timedelta(days=30*duration_months)
         
-    async def generate_roadmap(self, persona_type: str, duration_months: int, user_id: str = None) -> PersonalRoadmap:
-        """Generate a personalized roadmap based on persona type"""
+        # Create a prompt for Gemini
+        prompt = f"""
+        Create a personalized roadmap for someone with a {persona_type} personality type.
+        The roadmap should cover {duration_months} month(s) starting from {start_date}.
+        
+        Please structure the roadmap with:
+        1. Overall goals (short-term and long-term)
+        2. Weekly themes, where each week has a different focus
+        3. For each week, create 2-3 "quests" - specific learning tasks or activities
+        4. Each quest should have: task type, name, time commitment, detailed activity description, and learning resources
+        
+        Return your response as a JSON with the following structure:
+        {{
+          "user_id": "{user_id if user_id else 'user123'}",
+          "persona_type": "{persona_type}",
+          "start_date": "{start_date.isoformat()}",
+          "end_date": "{end_date.isoformat()}",
+          "duration_months": {duration_months},
+          "overall_goals": {{
+            "short_term": [
+              "Short term goal 1",
+              "Short term goal 2",
+              "Short term goal 3"
+            ],
+            "long_term": [
+              "Long term goal 1",
+              "Long term goal 2",
+              "Long term goal 3"
+            ]
+          }},
+          "weeks": [
+            {{
+              "week_number": 1,
+              "theme": "Theme for Week 1",
+              "quests": [
+                {{
+                  "task_type": "Learn/Build/Reflect/Collaborate/etc.",
+                  "task_name": "Specific task name",
+                  "resources": [
+                    {{
+                      "title": "Resource title",
+                      "link": "https://resource.link"
+                    }}
+                  ],
+                  "time_commitment": "Time needed (e.g., '1 hour/day (evening)')",
+                  "activity": "Detailed description of what to do"
+                }}
+              ]
+            }}
+          ]
+        }}
+        
+        Tailor the content specifically to the {persona_type} personality type.
+        For the resources, include actual relevant websites, courses, or tutorials that exist.
+        Make the activities specific, challenging but achievable, and appropriate for the persona type.
+        For a {duration_months} month roadmap, create {duration_months * 4} weeks of content.
+        """
+        
+        # Call Gemini API and parse response
+        response_data = await self.gemini_client.generate_content(prompt)
+        
+        # Process the response to create the roadmap
+        weeks = []
+        for week_data in response_data.get("weeks", []):
+            quests = []
+            for quest_data in week_data.get("quests", []):
+                resources = []
+                for resource_data in quest_data.get("resources", []):
+                    resource = Resource(
+                        title=resource_data["title"],
+                        link=resource_data["link"]
+                    )
+                    resources.append(resource)
+                
+                quest = Quest(
+                    task_type=quest_data["task_type"],
+                    task_name=quest_data["task_name"],
+                    resources=resources,
+                    time_commitment=quest_data["time_commitment"],
+                    activity=quest_data["activity"]
+                )
+                quests.append(quest)
+            
+            week = WeeklyTheme(
+                week_number=week_data["week_number"],
+                theme=week_data["theme"],
+                quests=quests
+            )
+            weeks.append(week)
+        
+        # Create overall goals
+        goals_data = response_data.get("overall_goals", {})
+        goals = Goal(
+            short_term=goals_data.get("short_term", []),
+            long_term=goals_data.get("long_term", [])
+        )
+        
+        # Convert response to PersonalRoadmap
+        roadmap = PersonalRoadmap(
+            user_id=user_id,
+            persona_type=persona_type,
+            duration_months=duration_months,
+            start_date=start_date,
+            end_date=end_date,
+            weeks=weeks,
+            overall_goals=goals
+        )
+        
+        return roadmap
+    
+    async def generate_daily_roadmap(self, persona_type: str, duration_months: int, user_id: str = None) -> PersonalRoadmap:
+        """Generate a personalized roadmap based on persona type with daily tasks"""
         # Calculate date range
         start_date = date.today()
         end_date = start_date + timedelta(days=30*duration_months)
@@ -25,7 +144,10 @@ class RoadmapGeneratorService:
         
         Return your response as a JSON with the following structure:
         {{
-            "overall_goals": ["goal 1", "goal 2", "goal 3"],
+            "overall_goals": {{
+                "short_term": ["Short term goal 1", "Short term goal 2", "Short term goal 3"],
+                "long_term": ["Long term goal 1", "Long term goal 2", "Long term goal 3"]
+            }},
             "daily_cards": [
                 {{
                     "date": "YYYY-MM-DD",
@@ -59,7 +181,7 @@ class RoadmapGeneratorService:
         
         # Process the response to convert string dates and times to proper objects
         processed_cards = []
-        for card in response_data["daily_cards"]:
+        for card in response_data.get("daily_cards", []):
             processed_tasks = []
             for task in card["tasks"]:
                 # Convert time strings to time objects
@@ -89,6 +211,20 @@ class RoadmapGeneratorService:
             )
             processed_cards.append(processed_card)
         
+        # Create overall goals
+        goals_data = response_data.get("overall_goals", {})
+        if isinstance(goals_data, list):
+            # Handle legacy format
+            goals = Goal(
+                short_term=goals_data[:3] if len(goals_data) >= 3 else goals_data,
+                long_term=goals_data[3:] if len(goals_data) > 3 else []
+            )
+        else:
+            goals = Goal(
+                short_term=goals_data.get("short_term", []),
+                long_term=goals_data.get("long_term", [])
+            )
+        
         # Convert response to PersonalRoadmap
         roadmap = PersonalRoadmap(
             user_id=user_id,
@@ -97,7 +233,14 @@ class RoadmapGeneratorService:
             start_date=start_date,
             end_date=end_date,
             daily_cards=processed_cards,
-            overall_goals=response_data["overall_goals"]
+            overall_goals=goals
         )
         
         return roadmap
+        
+    async def generate_roadmap(self, persona_type: str, duration_months: int, user_id: str = None, format_type: str = "weekly") -> PersonalRoadmap:
+        """Generate a personalized roadmap based on persona type and format preference"""
+        if format_type == "weekly":
+            return await self.generate_weekly_roadmap(persona_type, duration_months, user_id)
+        else:
+            return await self.generate_daily_roadmap(persona_type, duration_months, user_id)

@@ -17,7 +17,24 @@
 - Provides detailed analysis of personality traits and tendencies
 
 ### 2. 🗓️ AI-Generated Roadmap
-- Generates comprehensive daily task schedules for 3 or 6 months
+- Supports two roadmap formats:
+  - **Weekly Quest-Based**: Organized by weeks with specific learning quests
+  - **Daily Card-Based**: Daily schedule with timed activities
+
+#### Weekly Quest Format
+- Structures the learning journey into themed weeks
+- Each week contains 2-3 quests focused on specific learning objectives
+- Quests include:
+  - Task type (Learn, Build, Reflect, Collaborate, Share)
+  - Detailed activity descriptions
+  - Time commitment estimates
+  - Curated learning resources with links
+  - Clear expected outcomes
+- Provides both short-term and long-term goals
+- Designed for focused skill acquisition with clear milestones
+
+#### Daily Card Format
+- Generates comprehensive daily task schedules for 1, 3, or 6 months
 - Each day is represented as a structured card in JSON format
 - Each card contains 4-5 highly specific activities/tasks with scheduled times:
   - Morning activities
@@ -217,10 +234,54 @@ Generate a personalized roadmap based on a persona type.
 
 Query Parameters:
 - `persona_type` (string, required): The personality type
-- `duration_months` (integer, optional): Duration in months (3 or 6)
+- `duration_months` (integer, optional): Duration in months (1 to 12)
 - `user_id` (string, optional): User identifier
+- `format_type` (string, optional): "weekly" or "daily" (default: "weekly")
 
-Response:
+Response (Weekly Format):
+```json
+{
+  "user_id": "user123",
+  "persona_type": "Analytical",
+  "start_date": "2025-06-21",
+  "end_date": "2025-07-21",
+  "duration_months": 1,
+  "overall_goals": {
+    "short_term": [
+      "Gain proficiency in SQL and Python libraries (NumPy, Pandas)",
+      "Complete a full data analysis project using real datasets",
+      "Understand core data visualization techniques"
+    ],
+    "long_term": [
+      "Build strong foundations in data science and analytics",
+      "Prepare for internships or entry-level data roles",
+      "Develop a personal portfolio for showcasing projects"
+    ]
+  },
+  "weeks": [
+    {
+      "week_number": 1,
+      "theme": "Foundation Building",
+      "quests": [
+        {
+          "task_type": "Learn",
+          "task_name": "Master SQL fundamentals",
+          "resources": [
+            {
+              "title": "SQL for Data Science (Coursera)",
+              "link": "https://www.coursera.org/learn/sql-for-data-science"
+            }
+          ],
+          "time_commitment": "1 hour/day (evening)",
+          "activity": "Complete one module per day, practice with 5+ queries using SQLBolt."
+        }
+      ]
+    }
+  ]
+}
+```
+
+Response (Daily Format):
 ```json
 {
   "user_id": "optional-user-id",
@@ -244,18 +305,15 @@ Response:
           "resources": [
             "https://example.com/logic-puzzles"
           ]
-        },
-        ...
+        }
       ],
       "reflection_prompt": "How did today's critical thinking exercises challenge your assumptions?"
-    },
-    ...
+    }
   ],
-  "overall_goals": [
-    "Develop advanced analytical skills",
-    "Improve structured problem-solving approach",
-    "Enhance data interpretation abilities"
-  ]
+  "overall_goals": {
+    "short_term": ["Develop analytical skills"],
+    "long_term": ["Enhance data interpretation abilities"]
+  }
 }
 ```
 
